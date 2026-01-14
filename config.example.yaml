@@ -1,0 +1,55 @@
+# Augment-BYOK-Proxy (Rust) 配置示例
+
+server:
+  # 管理台：http://127.0.0.1:8317/admin（运行时编辑/保存配置）
+  # 注意：管理台会显示 token/api_key，建议仅监听 127.0.0.1
+  host: "127.0.0.1"
+  port: 8317
+
+proxy:
+  # VS Code 设置：augment.advanced.apiToken（用于连接本代理的鉴权 token，不是 LLM key）
+  auth_token: "proxy_your_auth_token"
+
+official:
+  # Augment 官方 completionURL（严格语义：视为完整 API 前缀，不补/抽/猜）
+  base_url: "https://api.augmentcode.com/"
+  # Augment 官方 token（用于本代理反代到官方；不会暴露给 VS Code；支持 raw token / Bearer / KEY=VALUE）
+  api_token: "AUGMENT_API_TOKEN=your_official_token"
+
+byok:
+  # 可选：默认 provider（不填则按 providers[0]）
+  active_provider_id: "anthropic"
+  providers:
+    - type: "anthropic"
+      id: "anthropic"
+      # 严格语义：base_url 视为完整 API 前缀，不补/抽/猜 /v1
+      # 例如官方应为：https://api.anthropic.com/v1
+      base_url: "https://api.anthropic.com/v1"
+      api_key: "sk-ant-your-api-key"
+      default_model: "claude-sonnet-4-20250514"
+      max_tokens: 8192
+      timeout_seconds: 120
+      thinking:
+        enabled: true
+        budget_tokens: 10000
+      # 需要时可加 beta header，例如：
+      # extra_headers:
+      #   anthropic-beta: "thinking-2024-10-22"
+      extra_headers: {}
+
+    - type: "openai_compatible"
+      id: "openai"
+      # 严格语义：base_url 视为完整 API 前缀，不补/抽/猜 /v1
+      # 例如 OpenAI 官方应为：https://api.openai.com/v1
+      base_url: "https://api.openai.com/v1"
+      api_key: "sk-your-openai-api-key"
+      default_model: "gpt-4o-mini"
+      max_tokens: 8192
+      timeout_seconds: 120
+      extra_headers: {}
+
+logging:
+  # tracing filter（tracing_subscriber EnvFilter 语法），默认 info
+  filter: "info"
+  # 排查 /chat-stream 请求：输出已脱敏摘要 JSON（默认省略 prefix/suffix/rules/tool_definitions/nodes/chat_history/blobs；不截断）
+  dump_chat_stream_body: false
