@@ -325,7 +325,6 @@ async fn chat_stream(
     ProviderRef::OpenAICompatible(_) => raw_model.trim().to_string(),
   };
 
-  compact_chat_history(&mut augment.chat_history);
   if let Err(err) = maybe_summarize_and_compact(
     &state.http,
     &cfg,
@@ -337,6 +336,7 @@ async fn chat_stream(
   {
     warn!(error=%err, "history_summary 自动摘要失败（已忽略，继续使用原始 chat_history）");
   }
+  compact_chat_history(&mut augment.chat_history);
 
   if augment.message.is_empty() && augment.chat_history.is_empty() {
     return ndjson_response(probe_response());

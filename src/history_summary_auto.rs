@@ -954,7 +954,7 @@ pub async fn maybe_summarize_and_compact(
   let total_with_extra = total_chars.saturating_add(augment.message.len());
 
   let strategy = hs.trigger_strategy.trim().to_ascii_lowercase();
-  let cw_tokens = resolve_context_window_tokens(hs, requested_model);
+  let cw_tokens_raw = resolve_context_window_tokens(hs, requested_model);
 
   let decision = match strategy.as_str() {
     "chars" => {
@@ -966,7 +966,7 @@ pub async fn maybe_summarize_and_compact(
         }
       }
     }
-    "ratio" => match cw_tokens {
+    "ratio" => match cw_tokens_raw {
       Some(context_window_tokens) => {
         let approx_total_tokens = approx_token_count_from_byte_len(total_with_extra);
         let approx_ratio = if context_window_tokens == 0 {
@@ -1013,7 +1013,14 @@ pub async fn maybe_summarize_and_compact(
       }
     },
     "auto" | _ => {
-      if let Some(context_window_tokens) = cw_tokens {
+      if let Some(context_window_tokens_raw) = cw_tokens_raw {
+        let cap_tokens = u32::try_from(hs.trigger_on_history_size_chars.saturating_div(4)).unwrap_or(u32::MAX);
+        let context_window_tokens = if cap_tokens > 0 {
+          context_window_tokens_raw.min(cap_tokens)
+        } else {
+          context_window_tokens_raw
+        };
+
         let approx_total_tokens = approx_token_count_from_byte_len(total_with_extra);
         let approx_ratio = if context_window_tokens == 0 {
           1.0

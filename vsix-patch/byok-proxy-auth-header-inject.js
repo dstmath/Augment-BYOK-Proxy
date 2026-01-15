@@ -583,7 +583,10 @@
     const tailCharsExcludeDefault = Math.max(0, Number(hs.history_tail_size_chars_to_exclude) || 0);
 
     const reqModel = normalizeByokModelForMatch(bodyObj.model || "");
-    const cwTokens = resolveContextWindowTokens(hs, reqModel);
+    const cwTokensRaw = resolveContextWindowTokens(hs, reqModel);
+    const cwTokens = (triggerStrategy === "auto" && cwTokensRaw > 0 && triggerOnChars > 0)
+      ? Math.min(cwTokensRaw, approxTokenCountFromByteLen(triggerOnChars))
+      : cwTokensRaw;
     const triggerRatio = Number(hs.trigger_on_context_ratio);
     const targetRatio = Number(hs.target_context_ratio);
 
