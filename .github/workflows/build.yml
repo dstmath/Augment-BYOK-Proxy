@@ -1,19 +1,24 @@
-name: Modify VS Code Extension
+name: build-release
 
 permissions:
   contents: write
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "0 */8 * * *"  # 每8小时执行一次
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-release
+  cancel-in-progress: true
 
 jobs:
   modify-extension:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      tag_name: ${{ steps.check_version.outputs.tag_name }}
-      skip_build: ${{ steps.check_version.outputs.skip_build }}
     
     steps:
       - name: Checkout repository
@@ -54,21 +59,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Discovered extension version: ${VERSION}"
 
-      - name: Check if version already exists
-        id: check_version
-        run: |
-          TAG_NAME="augment-vscode-modified-v${VERSION}"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
-          if git ls-remote --tags origin | grep -q "refs/tags/${TAG_NAME}$"; then
-            echo "Tag ${TAG_NAME} already exists, skipping build"
-            echo "skip_build=true" >> $GITHUB_OUTPUT
-          else
-            echo "Tag ${TAG_NAME} does not exist, proceeding with build"
-            echo "skip_build=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Find main entry file and variables
-        if: steps.check_version.outputs.skip_build == 'false'
         run: |
           # 查找主入口文件
           MAIN_FILE=""
@@ -134,7 +125,6 @@ jobs:
           echo "MAIN_FILE=$MAIN_FILE" >> $GITHUB_ENV
 
       - name: Apply modifications
-        if: steps.check_version.outputs.skip_build == 'false'
         run: |
           echo "Applying modifications to $MAIN_FILE"
 
@@ -205,7 +195,6 @@ jobs:
           node modify_script.js "$MAIN_FILE" "$SESSIONS_VAR" "$EMAIL_VAR"
 
       - name: Verify modifications
-        if: steps.check_version.outputs.skip_build == 'false'
         run: |
           echo "Verifying modifications..."
 
@@ -230,7 +219,6 @@ jobs:
 
 
       - name: Repack VSIX
-        if: steps.check_version.outputs.skip_build == 'false'
         run: |
           cd unpacked_ext
           # 重新打包为 VSIX
@@ -239,7 +227,6 @@ jobs:
           echo "VSIX repacked successfully as augment-vscode-modified-v${{ env.VERSION }}.vsix"
 
       - name: Upload modified VSIX
-        if: steps.check_version.outputs.skip_build == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: augment-vscode-modified-v${{ env.VERSION }}
@@ -249,7 +236,6 @@ jobs:
   build-proxy:
     name: Build Proxy ${{ matrix.folder }}
     needs: modify-extension
-    if: needs.modify-extension.outputs.skip_build == 'false'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -327,7 +313,7 @@ jobs:
     needs:
       - modify-extension
       - build-proxy
-    if: github.ref == 'refs/heads/main' && needs.modify-extension.outputs.skip_build == 'false'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -339,25 +325,22 @@ jobs:
       - name: List artifacts
         run: ls -la dist
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Rolling Release
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ needs.modify-extension.outputs.tag_name }}
-          name: Augment VSCode Modified v${{ needs.modify-extension.outputs.version }}
+          tag: rolling
+          name: Rolling
+          prerelease: true
+          allowUpdates: true
+          replacesArtifacts: true
           body: |
-            修改内容：
-            - 注入 BYOK Proxy Panel 面板入口
-            - 注入运行时拦截逻辑（inject-code.txt）
-            - 注入本地代理鉴权头（byok-proxy-auth-header-inject.js）
-            - 附带 Rust 代理预编译程序（macOS/Windows）
+            自动构建（push/schedule/手动触发）。
 
-            基于原版本: ${{ needs.modify-extension.outputs.version }}
-          files: |
+            - VSIX：基于 marketplace augment/vscode-augment v${{ needs.modify-extension.outputs.version }}
+            - Proxy：Rust 预编译（macOS/Windows）
+            - Commit: ${{ github.sha }}
+          artifacts: |
             dist/*.vsix
             dist/*.zip
             dist/*.tar.gz
             dist/*.sha256
-          draft: false
-          prerelease: false
